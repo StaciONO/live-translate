@@ -1,0 +1,43 @@
+{
+  "name": "LiveTranslate",
+  "version": "1.0.0",
+  "description": "即時會議語音轉文字翻譯",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac",
+    "build:dir": "electron-builder --mac --dir"
+  },
+  "keywords": ["translate", "speech", "transcription"],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.livetranslate.app",
+    "productName": "LiveTranslate",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "icon.icns",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["arm64"]
+        }
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "LiveTranslate 需要使用麥克風來進行即時語音辨識與翻譯。",
+        "NSSpeechRecognitionUsageDescription": "LiveTranslate 需要使用語音辨識來進行即時語音轉文字。"
+      }
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "icon.png",
+      "icon.icns"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1"
+  }
+}

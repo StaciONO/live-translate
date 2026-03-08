@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#f0f0f0">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.png">
+  <title>LiveTranslate</title>
+  <style>
+    :root {
+      --bg1: #f0f0f0; --bg2: #ffffff; --bg3: #e4e4e4;
+      --accent: #c89600; --accent2: #b08300;
+      --text1: #1a1a1a; --text2: #555555; --text3: #999999;
+      --ok: #16a34a; --err: #dc2626; --warn: #d97706;
+      --border: rgba(0,0,0,0.12);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', sans-serif;
+      background: var(--bg1); color: var(--text1);
+      height: 100vh; height: 100dvh; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; background: var(--bg2);
+      border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px;
+    }
+    .logo { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:700; color:var(--accent); white-space:nowrap; }
+    .logo-icon { width:32px; height:32px; background:linear-gradient(135deg,#d4a017,#c89600); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; color:#fff; }
+    .header-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      padding:6px 12px; border:1px solid var(--border); border-radius:8px;
+      background:var(--bg3); color:var(--text1); font-size:13px; cursor:pointer;
+      display:flex; align-items:center; gap:4px; white-space:nowrap; transition:all .2s;
+    }
+    .btn:hover { border-color:var(--accent); background:rgba(200,150,0,.1); }
+    .btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn-sm { padding:4px 8px; font-size:12px; }
+    select.lang-sel {
+      padding:6px 8px; background:var(--bg3); border:1px solid var(--border);
+      border-radius:8px; color:var(--text1); font-size:13px; outline:none; max-width:120px;
+    }
+
+    /* ===== MAIN LAYOUT ===== */
+    .main { flex:1; display:flex; overflow:hidden; position:relative; }
+
+    /* Desktop: side by side */
+    .panel-transcript { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+    .panel-notes { width:340px; display:flex; flex-direction:column; border-left:1px solid var(--border); overflow:hidden; }
+    .panel-claude { width:380px; display:flex; flex-direction:column; border-left:1px solid var(--border); overflow:hidden; }
+
+    /* ===== CLAUDE CHAT ===== */
+    .claude-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--border); flex-shrink:0; cursor:pointer; }
+    .claude-header-left { display:flex; align-items:center; gap:8px; }
+    .claude-avatar { width:28px; height:28px; background:linear-gradient(135deg,#d4a017,#c89600); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+    .claude-msgs { flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+    .claude-msgs::-webkit-scrollbar { width:4px; }
+    .claude-msgs::-webkit-scrollbar-thumb { background:rgba(0,0,0,.15); border-radius:2px; }
+    .cmsg { max-width:92%; padding:10px 14px; border-radius:12px; font-size:13px; line-height:1.6; word-break:break-word; animation:fadeIn .3s; }
+    .cmsg-user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+    .cmsg-ai { align-self:flex-start; background:var(--bg3); color:var(--text1); border-bottom-left-radius:4px; }
+    .cmsg-ai pre { background:rgba(0,0,0,.06); padding:8px; border-radius:6px; overflow-x:auto; margin:6px 0; font-size:12px; }
+    .cmsg-ai code { font-size:12px; }
+    .cmsg-system { align-self:center; background:transparent; color:var(--text3); font-size:12px; text-align:center; padding:4px; }
+    .cmsg-typing { align-self:flex-start; color:var(--text3); font-size:13px; padding:8px 14px; }
+    .cmsg-typing::after { content:'...'; animation:dots 1.5s infinite; }
+    @keyframes dots { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+    .claude-input-area { display:flex; gap:6px; padding:10px 14px; border-top:1px solid var(--border); flex-shrink:0; }
+    .claude-input { flex:1; padding:10px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text1); font-size:14px; outline:none; resize:none; font-family:inherit; min-height:42px; max-height:120px; }
+    .claude-input:focus { border-color:var(--accent); }
+    .claude-input::placeholder { color:var(--text3); }
+    .claude-send { padding:10px 14px; background:var(--accent); border:none; border-radius:8px; color:#fff; font-size:14px; cursor:pointer; align-self:flex-end; }
+    .claude-send:disabled { opacity:.4; cursor:not-allowed; }
+    .claude-setup { padding:20px 14px; display:flex; flex-direction:column; gap:12px; }
+    .claude-key-input { width:100%; padding:10px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; color:var(--text1); font-size:13px; outline:none; font-family:monospace; }
+    .claude-key-input:focus { border-color:var(--accent); }
+    .quick-btns { display:flex; flex-wrap:wrap; gap:4px; padding:4px 14px 8px; flex-shrink:0; }
+    .quick-btn { padding:4px 10px; background:var(--bg3); border:1px solid var(--border); border-radius:14px; color:var(--text2); font-size:11px; cursor:pointer; transition:all .2s; }
+    .quick-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+    /* ===== MOBILE TABS (horizontal tab mode) ===== */
+    .mobile-tabs {
+      display:none; background:var(--bg2); border-bottom:1px solid var(--border);
+      flex-shrink:0;
+    }
+    .mobile-tabs-inner { display:flex; }
+    .mob-tab {
+      flex:1; padding:10px; text-align:center; font-size:14px; font-weight:500;
+      color:var(--text3); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s;
+    }
+    .mob-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+    /* Layout toggle button */
+    .layout-toggle { display:none; }
+
+    @media(max-width:768px) {
+      .layout-toggle { display:flex; }
+      .header-actions .hide-mobile { display:none; }
+
+      /* Compact header on mobile */
+      .header { padding:6px 10px; gap:4px; flex-wrap:wrap; }
+      .logo { font-size:14px; gap:4px; }
+      .logo-icon { width:26px; height:26px; font-size:13px; border-radius:6px; }
+      .header-actions { gap:4px; }
+      .btn { padding:4px 8px; font-size:12px; gap:2px; }
+      select.lang-sel { padding:4px 6px; font-size:12px; max-width:100px; }
+
+      /* === Horizontal mode (tab switching, default) === */
+      body:not(.vertical-mode) .mobile-tabs { display:block; }
+      body:not(.vertical-mode) .panel-notes,
+      body:not(.vertical-mode) .panel-claude {
+        width:100%; position:absolute; inset:0; background:var(--bg2); border:none; display:none;
+      }
+      body:not(.vertical-mode) .panel-notes.mob-visible,
+      body:not(.vertical-mode) .panel-claude.mob-visible { display:flex; z-index:10; }
+      body:not(.vertical-mode) .panel-transcript { display:flex; }
+      body:not(.vertical-mode) .panel-transcript.mob-hidden { display:none; }
+
+      /* === Vertical mode (stacked, default on mobile) === */
+      body.vertical-mode .mobile-tabs { display:none; }
+      body.vertical-mode .main { flex-direction:column; }
+      body.vertical-mode .panel-transcript {
+        flex:1; border-bottom:1px solid var(--border); min-height:0;
+        width:100%; border-left:none;
+      }
+      body.vertical-mode .panel-notes {
+        flex:2; width:100%; display:flex; border-left:none;
+        border-bottom:1px solid var(--border); min-height:0;
+      }
+      body.vertical-mode .panel-claude {
+        flex:1; width:100%; display:flex; border-left:none; min-height:0;
+      }
+      /* Collapsed panels in vertical mobile */
+      body.vertical-mode .panel-transcript.collapsed {
+        flex:0 0 36px !important; overflow:hidden;
+      }
+      body.vertical-mode .panel-transcript.collapsed > :not(.transcript-collapse-bar) { display:none !important; }
+      body.vertical-mode .panel-notes.collapsed {
+        flex:0 0 36px !important;
+      }
+      body.vertical-mode .panel-claude.collapsed {
+        flex:0 0 36px !important;
+      }
+      /* Collapse bar styling */
+      .panel-collapse-bar {
+        display:none; padding:6px 12px; background:var(--bg2);
+        border-bottom:1px solid var(--border); flex-shrink:0;
+        align-items:center; justify-content:space-between; cursor:pointer;
+        font-size:13px; font-weight:500; color:var(--text2);
+      }
+      body.vertical-mode .panel-collapse-bar { display:flex; }
+      .panel-collapse-bar .panel-toggle { font-size:12px; }
+
+      /* Mobile vertical: compact notes/claude headers */
+      body.vertical-mode .notes-header { padding:6px 12px; }
+      body.vertical-mode .claude-header { padding:6px 12px; }
+      body.vertical-mode .notes-header span,
+      body.vertical-mode .claude-header span,
+      body.vertical-mode .claude-header-left span { font-size:13px !important; }
+      body.vertical-mode .claude-avatar { width:22px; height:22px; font-size:11px; }
+    }
+
+    /* ===== TRANSCRIPT ===== */
+    .transcript-scroll { flex:1; overflow-y:auto; padding:12px 16px; scroll-behavior:smooth; }
+    .transcript-scroll::-webkit-scrollbar { width:4px; }
+    .transcript-scroll::-webkit-scrollbar-thumb { background:rgba(0,0,0,.15); border-radius:2px; }
+
+    .entry {
+      display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border);
+      cursor:pointer; transition:background .2s; border-radius:6px;
+    }
+    .entry:hover { background:rgba(200,150,0,.06); }
+    .entry.highlight { background:rgba(200,150,0,.12); }
+    .entry-time { font-size:11px; color:var(--text3); min-width:50px; padding-top:2px; font-variant-numeric:tabular-nums; }
+    .entry-content { flex:1; min-width:0; }
+    .entry-original { font-size:14px; line-height:1.5; color:var(--text1); margin-bottom:4px; word-break:break-word; }
+    .entry-translation { font-size:13px; line-height:1.5; color:var(--accent); padding-left:10px; border-left:2px solid var(--accent); opacity:.85; word-break:break-word; }
+    .entry-interim { opacity:.4; font-style:italic; }
+
+    .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; color:var(--text3); }
+    .empty-icon { font-size:48px; opacity:.3; }
+
+    /* ===== AUDIO PLAYER ===== */
+    .audio-bar {
+      display:flex; align-items:center; gap:10px; padding:8px 16px;
+      background:var(--bg2); border-top:1px solid var(--border); flex-shrink:0;
+    }
+    .play-btn {
+      width:36px; height:36px; border-radius:50%; border:none;
+      background:var(--accent); color:#fff; font-size:16px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .audio-seek {
+      flex:1; -webkit-appearance:none; height:4px; background:rgba(0,0,0,.1);
+      border-radius:2px; outline:none;
+    }
+    .audio-seek::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; background:var(--accent); border-radius:50%; cursor:pointer; }
+    .audio-time { font-size:12px; color:var(--text3); font-variant-numeric:tabular-nums; min-width:90px; text-align:center; }
+
+    /* ===== RECORD CONTROLS ===== */
+    .controls {
+      display:flex; align-items:center; justify-content:center; gap:14px;
+      padding:10px 16px; background:var(--bg2); border-top:1px solid var(--border); flex-shrink:0;
+    }
+    @media(max-width:768px) {
+      .controls { padding:6px 10px; gap:8px; }
+    }
+    .rec-btn {
+      width:50px; height:50px; border-radius:50%; border:3px solid var(--err);
+      background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .3s;
+    }
+    .rec-btn-inner { width:22px; height:22px; background:var(--err); border-radius:50%; transition:all .3s; }
+    .rec-btn.on .rec-btn-inner { border-radius:4px; width:18px; height:18px; }
+    .rec-btn.on { animation:recPulse 1.5s infinite; }
+    @keyframes recPulse { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.4)} 50%{box-shadow:0 0 0 10px rgba(248,113,113,0)} }
+    .timer { font-size:15px; font-weight:600; color:var(--text2); font-variant-numeric:tabular-nums; min-width:60px; text-align:center; }
+    .timer.on { color:var(--err); }
+    .status-dot { width:8px; height:8px; border-radius:50%; background:var(--text3); }
+    .status-dot.on { background:var(--ok); animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ===== NOTES PANEL ===== */
+    .notes-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:10px 14px; border-bottom:1px solid var(--border); flex-shrink:0;
+      cursor:pointer;
+    }
+    .notes-tabs { display:flex; gap:2px; background:var(--bg3); border-radius:6px; padding:2px; }
+    .notes-tab {
+      padding:5px 12px; border:none; background:transparent; color:var(--text3);
+      border-radius:5px; font-size:12px; cursor:pointer; transition:all .2s;
+    }
+    .notes-tab.active { background:var(--accent); color:#fff; }
+
+    /* Text Notes */
+    .notes-list { flex:1; overflow-y:auto; padding:10px 14px; }
+    .note-item {
+      display:flex; gap:8px; padding:10px; margin-bottom:8px; background:var(--bg3);
+      border-radius:8px; border:1px solid var(--border); cursor:pointer; transition:all .2s;
+    }
+    .note-item:hover { border-color:var(--accent); }
+    .note-item.highlight { border-color:var(--accent); background:rgba(200,150,0,.1); }
+    .note-time { font-size:11px; color:var(--accent); white-space:nowrap; padding-top:1px; }
+    .note-text { font-size:13px; color:var(--text1); line-height:1.4; flex:1; word-break:break-word; }
+    .note-del { background:none; border:none; color:var(--text3); cursor:pointer; font-size:14px; padding:0 2px; }
+    .note-del:hover { color:var(--err); }
+
+    .note-input-area {
+      display:flex; gap:6px; padding:10px 14px; border-top:1px solid var(--border); flex-shrink:0;
+    }
+    .note-input {
+      flex:1; padding:10px 12px; background:var(--bg3); border:1px solid var(--border);
+      border-radius:8px; color:var(--text1); font-size:14px; outline:none; resize:none;
+      font-family:inherit; min-height:42px; max-height:100px;
+    }
+    .note-input:focus { border-color:var(--accent); }
+    .note-input::placeholder { color:var(--text3); }
+    .note-add-btn {
+      padding:10px 14px; background:var(--accent); border:none; border-radius:8px;
+      color:#fff; font-size:14px; cursor:pointer; white-space:nowrap; align-self:flex-end;
+    }
+
+    /* Drawing Canvas */
+    .draw-container { flex:1; display:flex; flex-direction:column; overflow:hidden; display:none; }
+    .draw-container.visible { display:flex; }
+    .draw-tools {
+      display:flex; align-items:center; gap:6px; padding:8px 14px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .color-dot {
+      width:24px; height:24px; border-radius:50%; border:2px solid transparent;
+      cursor:pointer; transition:all .2s;
+    }
+    .color-dot.active { border-color:#333; transform:scale(1.15); }
+    .size-btn {
+      padding:4px 10px; background:var(--bg3); border:1px solid var(--border);
+      border-radius:6px; color:var(--text2); font-size:11px; cursor:pointer;
+    }
+    .size-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .draw-canvas-wrap { flex:1; position:relative; overflow:hidden; background:#ffffff; }
+    .draw-canvas {
+      width:100%; height:100%; touch-action:none; cursor:crosshair;
+    }
+
+    /* Handwriting Input */
+    .hw-container { flex:1; display:flex; flex-direction:column; overflow:hidden; display:none; }
+    .hw-container.visible { display:flex; }
+    .hw-canvas-wrap { flex:1; position:relative; overflow:hidden; background:#ffffff; border-bottom:1px solid var(--border); }
+    .hw-canvas { width:100%; height:100%; touch-action:none; cursor:crosshair; }
+    .hw-preview {
+      padding:10px 14px; min-height:48px; background:var(--bg2); font-size:15px;
+      color:var(--text1); line-height:1.5; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:8px; flex-shrink:0;
+    }
+    .hw-preview-text { flex:1; min-height:24px; word-break:break-word; }
+    .hw-preview-text:empty::before { content:'在上方手寫，辨識結果會顯示在這裡'; color:var(--text3); font-size:13px; }
+    .hw-actions { display:flex; gap:6px; padding:8px 14px; flex-shrink:0; }
+    .hw-actions .btn { flex:1; justify-content:center; }
+
+    /* Notes list container (text mode) */
+    .notes-text-view { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+    .notes-text-view.hidden { display:none; }
+
+    /* ===== FLOATING SUBTITLE ===== */
+    .subtitle-overlay {
+      display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      width:85%; max-width:700px; background:rgba(255,255,255,.95); backdrop-filter:blur(16px);
+      border-radius:14px; padding:16px 24px; z-index:10000;
+      border:1px solid var(--border); box-shadow:0 16px 48px rgba(0,0,0,.15); cursor:move;
+    }
+    .subtitle-overlay.visible { display:block; }
+    .subtitle-original { font-size:18px; color:var(--text1); line-height:1.5; text-align:center; margin-bottom:6px; }
+    .subtitle-translation { font-size:16px; color:var(--accent); line-height:1.5; text-align:center; }
+    .subtitle-close { position:absolute; top:6px; right:10px; background:none; border:none; color:var(--text3); font-size:16px; cursor:pointer; }
+
+    /* ===== HISTORY MODAL ===== */
+    .modal-overlay {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.4);
+      z-index:20000; justify-content:center; align-items:center; padding:20px;
+    }
+    .modal-overlay.visible { display:flex; }
+    .modal {
+      background:var(--bg2); border:1px solid var(--border); border-radius:14px;
+      width:100%; max-width:500px; max-height:80vh; display:flex; flex-direction:column;
+      overflow:hidden;
+    }
+    .modal-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 18px; border-bottom:1px solid var(--border); flex-shrink:0;
+    }
+    .modal-header h3 { font-size:16px; font-weight:600; }
+    .modal-close { background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; }
+    .modal-body { flex:1; overflow-y:auto; padding:10px 18px; }
+    .history-item {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:12px; margin-bottom:8px; background:var(--bg3); border-radius:8px;
+      border:1px solid var(--border); cursor:pointer; transition:all .2s;
+    }
+    .history-item:hover { border-color:var(--accent); }
+    .history-info { flex:1; min-width:0; }
+    .history-date { font-size:13px; font-weight:500; color:var(--text1); }
+    .history-meta { font-size:11px; color:var(--text3); margin-top:2px; }
+    .history-del { background:none; border:none; color:var(--text3); cursor:pointer; font-size:14px; padding:4px 8px; }
+    .history-del:hover { color:var(--err); }
+    .history-empty { text-align:center; color:var(--text3); padding:30px; font-size:14px; }
+
+    /* ===== COLLAPSIBLE PANELS ===== */
+    .panel-toggle {
+      background:none; border:none; color:var(--text3); cursor:pointer; font-size:14px;
+      padding:2px 6px; border-radius:4px; transition:all .2s; line-height:1;
+    }
+    .panel-toggle:hover { color:var(--text1); background:var(--bg3); }
+    .panel-notes.collapsed, .panel-claude.collapsed {
+      flex:0 0 auto !important; width:auto !important; min-height:0 !important;
+    }
+    .panel-notes.collapsed > :not(.notes-header),
+    .panel-claude.collapsed > :not(.claude-header) { display:none !important; }
+    /* Desktop collapsed: just a narrow strip */
+    @media(min-width:769px) {
+      .panel-notes.collapsed { width:46px !important; }
+      .panel-claude.collapsed { width:46px !important; }
+      .panel-notes.collapsed .notes-header,
+      .panel-claude.collapsed .claude-header {
+        writing-mode:vertical-rl; text-orientation:mixed;
+        padding:14px 8px; justify-content:center; border-bottom:none;
+      }
+      .panel-notes.collapsed .notes-header > *:not(.panel-toggle),
+      .panel-claude.collapsed .claude-header > *:not(.panel-toggle) { display:none; }
+      .panel-notes.collapsed .panel-toggle,
+      .panel-claude.collapsed .panel-toggle {
+        writing-mode:horizontal-tb; margin:0;
+      }
+    }
+    /* Mobile/vertical collapsed: just a thin bar */
+    @media(max-width:768px) {
+      body.vertical-mode .panel-notes.collapsed,
+      body.vertical-mode .panel-claude.collapsed {
+        flex:0 0 38px !important;
+      }
+    }
+
+    /* Notes mode dropdown */
+    .notes-mode-sel {
+      padding:4px 8px; background:var(--bg3); border:1px solid var(--border);
+      border-radius:6px; color:var(--text1); font-size:12px; outline:none; cursor:pointer;
+    }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position:fixed; bottom:20px; right:20px; padding:10px 18px; background:#333;
+      border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#fff; font-size:13px;
+      z-index:10001; animation:slideUp .3s;
+    }
+    @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    .entry { animation:fadeIn .3s ease; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">🎙</div>
+    <span>LiveTranslate</span>
+  </div>
+  <div class="header-actions">
+    <select class="lang-sel" id="srcLang" title="語音語言">
+      <option value="en-US">🗣 English</option>
+      <option value="zh-TW">🗣 中文(繁體)</option>
+      <option value="zh-CN">🗣 中文(簡體)</option>
+      <option value="ja">🗣 日本語</option>
+      <option value="ko">🗣 한국어</option>
+      <option value="fr-FR">🗣 Français</option>
+      <option value="de-DE">🗣 Deutsch</option>
+      <option value="es-ES">🗣 Español</option>
+      <option value="th">🗣 ภาษาไทย</option>
+      <option value="vi">🗣 Tiếng Việt</option>
+    </select>
+    <span style="color:var(--text3);font-size:16px;">→</span>
+    <select class="lang-sel" id="tgtLang" title="翻譯語言">
+      <option value="zh-TW">🌐 中文(繁體)</option>
+      <option value="zh-CN">🌐 中文(簡體)</option>
+      <option value="en">🌐 English</option>
+      <option value="ja">🌐 日本語</option>
+      <option value="ko">🌐 한국어</option>
+      <option value="fr">🌐 Français</option>
+      <option value="de">🌐 Deutsch</option>
+      <option value="es">🌐 Español</option>
+      <option value="th">🌐 ภาษาไทย</option>
+      <option value="vi">🌐 Tiếng Việt</option>
+    </select>
+    <button class="btn layout-toggle" id="layoutBtn" onclick="toggleLayout()">📐 直式</button>
+    <button class="btn" id="subtitleBtn" onclick="toggleSubtitle()">💬 字幕</button>
+    <button class="btn btn-sm" onclick="showHistory()">📂</button>
+    <button class="btn btn-sm" onclick="exportAll()">📥</button>
+  </div>
+</header>
+
+<!-- MOBILE TABS -->
+<div class="mobile-tabs">
+  <div class="mobile-tabs-inner">
+    <div class="mob-tab active" onclick="showMobPanel('transcript',this)">📝 逐字稿</div>
+    <div class="mob-tab" onclick="showMobPanel('notes',this)">✏️ 筆記</div>
+    <div class="mob-tab" onclick="showMobPanel('claude',this)">🤖 Claude</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- Transcript Panel -->
+  <div class="panel-transcript" id="panelTranscript">
+    <div class="panel-collapse-bar transcript-collapse-bar" onclick="togglePanel('transcript')">
+      <span>📝 逐字稿</span>
+      <button class="panel-toggle" title="收合/展開">▼</button>
+    </div>
+    <div class="transcript-scroll" id="transcriptScroll">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🎙️</div>
+        <div style="font-size:15px;">按下錄音鍵開始即時語音辨識</div>
+        <div style="font-size:12px;">支援 Chrome / Edge / Safari</div>
+      </div>
+    </div>
+    <!-- Audio Player -->
+    <div class="audio-bar" id="audioBar" style="display:none;">
+      <button class="play-btn" id="playBtn" onclick="togglePlayback()">▶</button>
+      <input type="range" class="audio-seek" id="audioSeek" min="0" max="100" value="0" oninput="seekAudio(this.value)">
+      <span class="audio-time" id="audioTime">00:00 / 00:00</span>
+    </div>
+  </div>
+
+  <!-- Notes Panel -->
+  <div class="panel-notes" id="panelNotes">
+    <div class="notes-header" onclick="if(window.innerWidth<=768&&document.body.classList.contains('vertical-mode'))togglePanel('notes')">
+      <span style="font-size:14px;font-weight:600;">📒 筆記</span>
+      <select class="notes-mode-sel" id="notesModeSelect" onchange="switchNotesTab(this.value)" onclick="event.stopPropagation()">
+        <option value="text">文字</option>
+        <option value="hw">手寫</option>
+        <option value="draw">繪圖</option>
+      </select>
+      <button class="panel-toggle" onclick="event.stopPropagation();togglePanel('notes')" title="收合/展開">▲</button>
+    </div>
+
+    <!-- Text Notes -->
+    <div class="notes-text-view" id="notesTextView">
+      <div class="notes-list" id="notesList"></div>
+      <div class="note-input-area">
+        <textarea class="note-input" id="noteInput" placeholder="輸入筆記... (Enter 送出)" rows="1" onkeydown="noteKeyDown(event)"></textarea>
+        <button class="note-add-btn" onclick="addNote()">➕</button>
+      </div>
+    </div>
+
+    <!-- Handwriting Input -->
+    <div class="hw-container" id="hwContainer">
+      <div class="hw-canvas-wrap">
+        <canvas id="hwCanvas" class="hw-canvas"></canvas>
+      </div>
+      <div class="hw-preview">
+        <div class="hw-preview-text" id="hwPreview"></div>
+      </div>
+      <div class="hw-actions">
+        <button class="btn" onclick="hwClear()">🗑 清除</button>
+        <button class="btn" onclick="hwUndo()">↩ 復原</button>
+        <button class="btn active" onclick="hwAddNote()">✓ 加入筆記</button>
+      </div>
+    </div>
+
+    <!-- Drawing Canvas -->
+    <div class="draw-container" id="drawContainer">
+      <div class="draw-tools">
+        <div class="color-dot active" style="background:#222" onclick="setColor('#222',this)"></div>
+        <div class="color-dot" style="background:#c89600" onclick="setColor('#c89600',this)"></div>
+        <div class="color-dot" style="background:#16a34a" onclick="setColor('#16a34a',this)"></div>
+        <div class="color-dot" style="background:#2563eb" onclick="setColor('#2563eb',this)"></div>
+        <div class="color-dot" style="background:#dc2626" onclick="setColor('#dc2626',this)"></div>
+        <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+        <button class="size-btn active" onclick="setSize(2,this)">細</button>
+        <button class="size-btn" onclick="setSize(4,this)">中</button>
+        <button class="size-btn" onclick="setSize(8,this)">粗</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm" onclick="undoStroke()">↩ 復原</button>
+        <button class="btn btn-sm" onclick="clearCanvas()">清除</button>
+      </div>
+      <div class="draw-canvas-wrap">
+        <canvas id="drawCanvas" class="draw-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Claude Chat Panel -->
+  <div class="panel-claude" id="panelClaude">
+    <div class="claude-header" onclick="if(window.innerWidth<=768&&document.body.classList.contains('vertical-mode'))togglePanel('claude')">
+      <div class="claude-header-left">
+        <div class="claude-avatar">🤖</div>
+        <span style="font-size:14px;font-weight:600;">Claude 助理</span>
+      </div>
+      <button class="btn btn-sm" onclick="event.stopPropagation();showClaudeSetup()" title="設定 API Key">⚙️</button>
+      <button class="panel-toggle" onclick="event.stopPropagation();togglePanel('claude')" title="收合/展開">▲</button>
+    </div>
+
+    <!-- Setup (shown when no API key) -->
+    <div class="claude-setup" id="claudeSetup">
+      <div style="font-size:13px;color:var(--text2);line-height:1.5;" id="claudeSetupMsg">
+        輸入 Anthropic API Key，所有使用者都可共用（儲存在伺服器端）。
+      </div>
+      <input type="password" class="claude-key-input" id="claudeKeyInput" placeholder="sk-ant-..." value="">
+      <button class="btn" style="align-self:flex-start;" onclick="saveClaudeKey()">✓ 儲存並開始</button>
+      <div style="font-size:11px;color:var(--text3);line-height:1.4;">
+        API Key 儲存在伺服器端，同網路的所有裝置都可使用。
+        <br>取得 Key：<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent);text-decoration:underline;">console.anthropic.com</a>
+      </div>
+    </div>
+
+    <!-- Chat (shown when API key set) -->
+    <div class="claude-msgs" id="claudeMsgs" style="display:none;"></div>
+    <div class="quick-btns" id="quickBtns" style="display:none;">
+      <button class="quick-btn" onclick="quickAsk('總結到目前為止的討論重點')">📋 總結重點</button>
+      <button class="quick-btn" onclick="quickAsk('列出目前討論中的待辦事項')">✅ 列待辦</button>
+      <button class="quick-btn" onclick="quickAsk('有什麼重要的點我可能遺漏了？')">🔍 遺漏</button>
+      <button class="quick-btn" onclick="quickAsk('用簡單的方式解釋剛剛討論的內容')">💡 簡化</button>
+    </div>
+    <div class="claude-input-area" id="claudeInputArea" style="display:none;">
+      <textarea class="claude-input" id="claudeInput" placeholder="問 Claude 任何問題..." rows="1" onkeydown="claudeKeyDown(event)"></textarea>
+      <button class="claude-send" id="claudeSend" onclick="sendClaude()">送出</button>
+    </div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button class="btn btn-sm" id="audioSrcBtn" onclick="toggleAudioSource()" title="切換音訊來源" style="font-size:16px;padding:6px;">🎤</button>
+  <div class="status-dot" id="statusDot"></div>
+  <span class="timer" id="timer">00:00</span>
+  <button class="rec-btn" id="recBtn" onclick="toggleRec()">
+    <div class="rec-btn-inner"></div>
+  </button>
+  <span style="font-size:12px;color:var(--text3);min-width:60px;text-align:center;" id="recHint">按下開始</span>
+  <button class="btn btn-sm" onclick="newSession()" title="新建場次" style="font-size:14px;padding:6px 10px;">📄 新建</button>
+</div>
+
+<!-- History Modal -->
+<div class="modal-overlay" id="historyModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📂 歷史紀錄</h3>
+      <button class="modal-close" onclick="closeHistory()">✕</button>
+    </div>
+    <div class="modal-body" id="historyList"></div>
+  </div>
+</div>
+
+<!-- Floating Subtitle -->
+<div class="subtitle-overlay" id="subtitleOverlay">
+  <button class="subtitle-close" onclick="toggleSubtitle()">✕</button>
+  <div class="subtitle-original" id="subOrig">等待語音...</div>
+  <div class="subtitle-translation" id="subTrans"></div>
+</div>
+
+<script>
+// ==================== STATE ====================
+const state = {
+  recording: false,
+  startTime: null,
+  entries: [],    // {id, time, timeOffset, original, translation}
+  notes: [],      // {id, time, timeOffset, text}
+  audioChunks: [],
+  audioBlob: null,
+  audioUrl: null,
+};
+let recognition = null;
+let mediaRecorder = null;
+let audioEl = null;
+let timerIv = null;
+let subtitleOn = false;
+
+// ==================== SPEECH RECOGNITION ====================
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function createRecognition() {
+  if (!SR) {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad/.test(ua)) toast('iOS 請用 Safari 並確保使用 HTTPS 連線');
+    else if (/Android/.test(ua)) toast('請使用 Chrome 瀏覽器');
+    else toast('此瀏覽器不支援語音辨識，請用 Chrome 或 Edge');
+    return null;
+  }
+  const r = new SR();
+  r.lang = document.getElementById('srcLang').value;
+  r.continuous = true;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+
+  r.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    if (interim && subtitleOn) {
+      document.getElementById('subOrig').textContent = interim;
+      document.getElementById('subOrig').style.opacity = '0.5';
+    }
+    if (final.trim()) addEntry(final.trim());
+  };
+
+  r.onerror = (e) => {
+    if (e.error === 'no-speech') return;
+    if (e.error === 'not-allowed') { toast('請允許麥克風權限'); stopRec(); }
+    console.error('SR error:', e.error);
+  };
+
+  r.onend = () => {
+    if (state.recording) {
+      setTimeout(() => { if (state.recording) { r.lang = document.getElementById('srcLang').value; try { r.start(); } catch(ex){} } }, 100);
+    }
+  };
+
+  return r;
+}
+
+// ==================== RECORDING ====================
+// ==================== AUDIO SOURCE ====================
+let audioSource = 'mic'; // 'mic' or 'system'
+let displayStream = null;
+
+function toggleAudioSource() {
+  if (state.recording) { toast('請先停止錄音再切換'); return; }
+  // Check if screen capture with audio is supported
+  if (!navigator.mediaDevices.getDisplayMedia) {
+    toast('此裝置不支援系統音訊擷取，僅電腦 Chrome 可用');
+    return;
+  }
+  audioSource = audioSource === 'mic' ? 'system' : 'mic';
+  const btn = document.getElementById('audioSrcBtn');
+  btn.textContent = audioSource === 'mic' ? '🎤' : '🖥️';
+  btn.title = audioSource === 'mic' ? '目前：麥克風（點擊切換系統音訊）' : '目前：系統音訊（點擊切換麥克風）';
+  toast(audioSource === 'mic' ? '🎤 已切換為麥克風' : '🖥️ 已切換為系統音訊（選擇要擷取的分頁）');
+}
+
+function toggleRec() {
+  state.recording ? stopRec() : startRec();
+}
+
+async function startRec() {
+  recognition = createRecognition();
+  if (!recognition) return;
+
+  // Start audio recording
+  try {
+    let stream;
+    if (audioSource === 'system') {
+      // Capture system/tab audio via getDisplayMedia
+      try {
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,  // required by API, we'll ignore video
+          audio: true,
+          preferCurrentTab: false,
+          systemAudio: 'include',
+        });
+        // Check if audio track was granted
+        const audioTracks = displayStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          toast('未選擇音訊來源，請重新選擇並勾選「分享音訊」');
+          displayStream.getTracks().forEach(t => t.stop());
+          displayStream = null;
+          return;
+        }
+        // Create audio-only stream for recording
+        stream = new MediaStream(audioTracks);
+        // Stop video track to save resources
+        displayStream.getVideoTracks().forEach(t => t.stop());
+        // Listen for user stopping screen share
+        audioTracks[0].onended = () => {
+          if (state.recording) stopRec();
+        };
+      } catch (err) {
+        if (err.name === 'NotAllowedError') {
+          toast('已取消選擇');
+        } else {
+          toast('系統音訊擷取失敗：' + err.message);
+        }
+        return;
+      }
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+
+    mediaRecorder = new MediaRecorder(stream);
+    state.audioChunks = [];
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) state.audioChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      state.audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
+      state.audioUrl = URL.createObjectURL(state.audioBlob);
+      showAudioPlayer();
+    };
+    mediaRecorder.start(1000);
+  } catch (err) {
+    console.warn('Audio recording failed:', err);
+  }
+
+  recognition.start();
+  state.recording = true;
+  state.startTime = Date.now();
+
+  document.getElementById('recBtn').classList.add('on');
+  document.getElementById('recHint').textContent = audioSource === 'system' ? '擷取中...' : '按下停止';
+  document.getElementById('statusDot').classList.add('on');
+  document.getElementById('timer').classList.add('on');
+
+  const es = document.getElementById('emptyState');
+  if (es) es.remove();
+
+  timerIv = setInterval(updateTimer, 1000);
+}
+
+function stopRec() {
+  state.recording = false;
+  if (recognition) { recognition.stop(); recognition = null; }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') { mediaRecorder.stop(); }
+  // Stop display stream tracks
+  if (displayStream) {
+    displayStream.getTracks().forEach(t => t.stop());
+    displayStream = null;
+  }
+
+  document.getElementById('recBtn').classList.remove('on');
+  document.getElementById('recHint').textContent = '按下開始';
+  document.getElementById('statusDot').classList.remove('on');
+  document.getElementById('timer').classList.remove('on');
+  clearInterval(timerIv);
+}
+
+function getTimeOffset() {
+  return state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
+}
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, '0');
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function updateTimer() {
+  if (!state.startTime) return;
+  document.getElementById('timer').textContent = fmtTime(getTimeOffset());
+}
+
+// ==================== ENTRIES ====================
+function addEntry(text) {
+  const offset = getTimeOffset();
+  const entry = {
+    id: Date.now(),
+    time: new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    timeOffset: offset,
+    original: text,
+    translation: '',
+  };
+  state.entries.push(entry);
+  renderEntry(entry);
+  translateEntry(entry);
+
+  if (subtitleOn) {
+    document.getElementById('subOrig').textContent = text;
+    document.getElementById('subOrig').style.opacity = '1';
+  }
+
+  // Auto-scroll
+  const s = document.getElementById('transcriptScroll');
+  s.scrollTop = s.scrollHeight;
+}
+
+function renderEntry(entry) {
+  const div = document.createElement('div');
+  div.className = 'entry';
+  div.id = `e-${entry.id}`;
+  div.onclick = () => seekToOffset(entry.timeOffset);
+  div.innerHTML = `
+    <div class="entry-time">${fmtTime(entry.timeOffset)}</div>
+    <div class="entry-content">
+      <div class="entry-original">${entry.original}</div>
+      <div class="entry-translation" id="et-${entry.id}"></div>
+    </div>`;
+  document.getElementById('transcriptScroll').appendChild(div);
+}
+
+// ==================== TRANSLATION (faster with cache + abort) ====================
+const transCache = {};
+let transController = null;
+
+async function translateEntry(entry) {
+  const src = document.getElementById('srcLang').value.split('-')[0];
+  const tgt = document.getElementById('tgtLang').value;
+
+  if (src === tgt.split('-')[0]) {
+    entry.translation = entry.original;
+    updateTransUI(entry);
+    return;
+  }
+
+  // Cache hit
+  const cacheKey = `${src}|${tgt}|${entry.original}`;
+  if (transCache[cacheKey]) {
+    entry.translation = transCache[cacheKey];
+    updateTransUI(entry);
+    return;
+  }
+
+  try {
+    // Use AbortController for timeout (3s)
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${tgt}&dt=t&q=${encodeURIComponent(entry.original)}`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await res.json();
+    entry.translation = data[0].map(r => r[0]).join('');
+    transCache[cacheKey] = entry.translation;
+  } catch (err) {
+    // Fallback to MyMemory (also with timeout)
+    try {
+      const ctrl2 = new AbortController();
+      const timer2 = setTimeout(() => ctrl2.abort(), 3000);
+      const url2 = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(entry.original)}&langpair=${src}|${tgt}`;
+      const res2 = await fetch(url2, { signal: ctrl2.signal });
+      clearTimeout(timer2);
+      const data2 = await res2.json();
+      entry.translation = data2.responseData?.translatedText || '[翻譯失敗]';
+      if (entry.translation && entry.translation !== '[翻譯失敗]') transCache[cacheKey] = entry.translation;
+    } catch { entry.translation = '[翻譯中...]'; }
+  }
+
+  updateTransUI(entry);
+}
+
+function updateTransUI(entry) {
+  const el = document.getElementById(`et-${entry.id}`);
+  if (el) el.textContent = entry.translation;
+  if (subtitleOn && state.entries.length && state.entries[state.entries.length-1].id === entry.id) {
+    document.getElementById('subTrans').textContent = entry.translation;
+  }
+}
+
+// ==================== AUDIO PLAYBACK ====================
+function showAudioPlayer() {
+  document.getElementById('audioBar').style.display = 'flex';
+  audioEl = new Audio(state.audioUrl);
+  audioEl.ontimeupdate = () => {
+    const seek = document.getElementById('audioSeek');
+    if (audioEl.duration) {
+      seek.value = (audioEl.currentTime / audioEl.duration) * 100;
+      document.getElementById('audioTime').textContent = `${fmtTime(audioEl.currentTime)} / ${fmtTime(audioEl.duration)}`;
+    }
+  };
+  audioEl.onended = () => { document.getElementById('playBtn').textContent = '▶'; };
+}
+
+function togglePlayback() {
+  if (!audioEl) return;
+  if (audioEl.paused) {
+    audioEl.play();
+    document.getElementById('playBtn').textContent = '⏸';
+  } else {
+    audioEl.pause();
+    document.getElementById('playBtn').textContent = '▶';
+  }
+}
+
+function seekAudio(val) {
+  if (!audioEl || !audioEl.duration) return;
+  audioEl.currentTime = (val / 100) * audioEl.duration;
+}
+
+function seekToOffset(offset) {
+  if (audioEl && audioEl.duration) {
+    audioEl.currentTime = Math.min(offset, audioEl.duration);
+    audioEl.play();
+    document.getElementById('playBtn').textContent = '⏸';
+    document.getElementById('audioBar').style.display = 'flex';
+  }
+  // Highlight the entry
+  document.querySelectorAll('.entry').forEach(e => e.classList.remove('highlight'));
+  const closest = state.entries.reduce((best, e) =>
+    Math.abs(e.timeOffset - offset) < Math.abs(best.timeOffset - offset) ? e : best
+  , state.entries[0]);
+  if (closest) {
+    const el = document.getElementById(`e-${closest.id}`);
+    if (el) {
+      el.classList.add('highlight');
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => el.classList.remove('highlight'), 3000);
+    }
+  }
+}
+
+// ==================== NOTES ====================
+function addNote() {
+  const input = document.getElementById('noteInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const offset = getTimeOffset();
+  const note = {
+    id: Date.now(),
+    time: new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    timeOffset: offset,
+    text
+  };
+  state.notes.push(note);
+  renderNote(note);
+  input.value = '';
+  input.style.height = '42px';
+}
+
+function noteKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    addNote();
+  }
+  // Auto resize
+  setTimeout(() => {
+    e.target.style.height = '42px';
+    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+  }, 0);
+}
+
+function renderNote(note) {
+  const div = document.createElement('div');
+  div.className = 'note-item';
+  div.id = `n-${note.id}`;
+  div.innerHTML = `
+    <div class="note-time">${fmtTime(note.timeOffset)}</div>
+    <div class="note-text">${note.text}</div>
+    <button class="note-del" onclick="event.stopPropagation();deleteNote(${note.id})">✕</button>`;
+  div.onclick = () => {
+    seekToOffset(note.timeOffset);
+    // Highlight this note
+    document.querySelectorAll('.note-item').forEach(n => n.classList.remove('highlight'));
+    div.classList.add('highlight');
+    setTimeout(() => div.classList.remove('highlight'), 3000);
+  };
+  document.getElementById('notesList').appendChild(div);
+  // Auto-scroll notes
+  const nl = document.getElementById('notesList');
+  nl.scrollTop = nl.scrollHeight;
+}
+
+function deleteNote(id) {
+  state.notes = state.notes.filter(n => n.id !== id);
+  const el = document.getElementById(`n-${id}`);
+  if (el) el.remove();
+}
+
+// ==================== DRAWING CANVAS ====================
+let drawCtx, drawColor = '#222', drawSize = 2, isDrawing = false, strokes = [], currentStroke = [];
+
+function initCanvas() {
+  const canvas = document.getElementById('drawCanvas');
+  const wrap = canvas.parentElement;
+  drawCtx = canvas.getContext('2d');
+
+  function resize() {
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    drawCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    redrawStrokes();
+  }
+
+  new ResizeObserver(resize).observe(wrap);
+  setTimeout(resize, 100);
+
+  canvas.addEventListener('pointerdown', (e) => {
+    isDrawing = true;
+    currentStroke = [];
+    const pt = getCanvasPoint(e, canvas);
+    pt.color = drawColor;
+    pt.size = drawSize;
+    pt.pressure = e.pressure || 0.5;
+    currentStroke.push(pt);
+    drawCtx.beginPath();
+    drawCtx.moveTo(pt.x, pt.y);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!isDrawing) return;
+    const pt = getCanvasPoint(e, canvas);
+    pt.color = drawColor;
+    pt.size = drawSize;
+    pt.pressure = e.pressure || 0.5;
+    currentStroke.push(pt);
+
+    drawCtx.strokeStyle = pt.color;
+    drawCtx.lineWidth = pt.size * (0.5 + pt.pressure);
+    drawCtx.lineCap = 'round';
+    drawCtx.lineJoin = 'round';
+    drawCtx.lineTo(pt.x, pt.y);
+    drawCtx.stroke();
+    drawCtx.beginPath();
+    drawCtx.moveTo(pt.x, pt.y);
+  });
+
+  const endDraw = () => {
+    if (isDrawing && currentStroke.length > 0) {
+      strokes.push([...currentStroke]);
+      currentStroke = [];
+    }
+    isDrawing = false;
+  };
+
+  canvas.addEventListener('pointerup', endDraw);
+  canvas.addEventListener('pointerleave', endDraw);
+  canvas.addEventListener('pointercancel', endDraw);
+}
+
+function getCanvasPoint(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function redrawStrokes() {
+  if (!drawCtx) return;
+  const canvas = document.getElementById('drawCanvas');
+  drawCtx.clearRect(0, 0, canvas.width, canvas.height);
+  strokes.forEach(stroke => {
+    if (stroke.length < 2) return;
+    for (let i = 1; i < stroke.length; i++) {
+      const p = stroke[i];
+      drawCtx.strokeStyle = p.color;
+      drawCtx.lineWidth = p.size * (0.5 + (p.pressure || 0.5));
+      drawCtx.lineCap = 'round';
+      drawCtx.lineJoin = 'round';
+      drawCtx.beginPath();
+      drawCtx.moveTo(stroke[i-1].x, stroke[i-1].y);
+      drawCtx.lineTo(p.x, p.y);
+      drawCtx.stroke();
+    }
+  });
+}
+
+function setColor(c, el) {
+  drawColor = c;
+  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function setSize(s, el) {
+  drawSize = s;
+  document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function undoStroke() {
+  strokes.pop();
+  redrawStrokes();
+}
+
+function clearCanvas() {
+  if (strokes.length && !confirm('確定清除所有繪圖？')) return;
+  strokes = [];
+  redrawStrokes();
+}
+
+// ==================== HANDWRITING INPUT ====================
+let hwCtx, hwStrokes = [], hwCurrentStroke = [], hwDrawing = false;
+let hwRecogTimer = null;
+
+function initHwCanvas() {
+  const canvas = document.getElementById('hwCanvas');
+  const wrap = canvas.parentElement;
+  hwCtx = canvas.getContext('2d');
+
+  function resize() {
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    hwCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    hwRedraw();
+  }
+
+  new ResizeObserver(resize).observe(wrap);
+  setTimeout(resize, 100);
+
+  canvas.addEventListener('pointerdown', (e) => {
+    hwDrawing = true;
+    hwCurrentStroke = [];
+    const pt = hwGetPoint(e, canvas);
+    hwCurrentStroke.push(pt);
+    hwCtx.beginPath();
+    hwCtx.moveTo(pt.x, pt.y);
+    // Cancel pending recognition while user is still writing
+    if (hwRecogTimer) { clearTimeout(hwRecogTimer); hwRecogTimer = null; }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!hwDrawing) return;
+    const pt = hwGetPoint(e, canvas);
+    hwCurrentStroke.push(pt);
+    hwCtx.strokeStyle = '#c89600';
+    hwCtx.lineWidth = 3;
+    hwCtx.lineCap = 'round';
+    hwCtx.lineJoin = 'round';
+    hwCtx.lineTo(pt.x, pt.y);
+    hwCtx.stroke();
+    hwCtx.beginPath();
+    hwCtx.moveTo(pt.x, pt.y);
+  });
+
+  const endHw = () => {
+    if (hwDrawing && hwCurrentStroke.length > 1) {
+      hwStrokes.push([...hwCurrentStroke]);
+      hwCurrentStroke = [];
+      // Auto-recognize after 1s of no new strokes
+      if (hwRecogTimer) clearTimeout(hwRecogTimer);
+      hwRecogTimer = setTimeout(() => hwRecognize(), 1000);
+    }
+    hwDrawing = false;
+  };
+
+  canvas.addEventListener('pointerup', endHw);
+  canvas.addEventListener('pointerleave', endHw);
+  canvas.addEventListener('pointercancel', endHw);
+}
+
+function hwGetPoint(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: Date.now() };
+}
+
+function hwRedraw() {
+  if (!hwCtx) return;
+  const canvas = document.getElementById('hwCanvas');
+  hwCtx.clearRect(0, 0, canvas.width, canvas.height);
+  // Draw guide lines
+  const wrap = canvas.parentElement;
+  const h = wrap.getBoundingClientRect().height;
+  hwCtx.strokeStyle = 'rgba(0,0,0,0.06)';
+  hwCtx.lineWidth = 1;
+  for (let y = 40; y < h; y += 40) {
+    hwCtx.beginPath(); hwCtx.moveTo(0, y); hwCtx.lineTo(wrap.getBoundingClientRect().width, y); hwCtx.stroke();
+  }
+  // Redraw strokes
+  hwStrokes.forEach(stroke => {
+    if (stroke.length < 2) return;
+    hwCtx.strokeStyle = '#c89600';
+    hwCtx.lineWidth = 3;
+    hwCtx.lineCap = 'round';
+    hwCtx.lineJoin = 'round';
+    for (let i = 1; i < stroke.length; i++) {
+      hwCtx.beginPath();
+      hwCtx.moveTo(stroke[i-1].x, stroke[i-1].y);
+      hwCtx.lineTo(stroke[i].x, stroke[i].y);
+      hwCtx.stroke();
+    }
+  });
+}
+
+async function hwRecognize() {
+  if (!hwStrokes.length) return;
+  const preview = document.getElementById('hwPreview');
+  preview.textContent = '辨識中...';
+
+  // Build ink data for Google Handwriting API
+  const ink = hwStrokes.map(stroke => {
+    const xs = stroke.map(p => Math.round(p.x));
+    const ys = stroke.map(p => Math.round(p.y));
+    return [xs, ys];
+  });
+
+  // Determine writing language from source lang
+  const srcLang = document.getElementById('srcLang').value;
+  let hwLang = 'zh-TW'; // default
+  if (srcLang.startsWith('en')) hwLang = 'en';
+  else if (srcLang.startsWith('ja')) hwLang = 'ja';
+  else if (srcLang.startsWith('ko')) hwLang = 'ko';
+  else if (srcLang.startsWith('zh-CN')) hwLang = 'zh-CN';
+  else if (srcLang.startsWith('zh-TW')) hwLang = 'zh-TW';
+  else if (srcLang.startsWith('fr')) hwLang = 'fr';
+  else if (srcLang.startsWith('de')) hwLang = 'de';
+  else if (srcLang.startsWith('es')) hwLang = 'es';
+  else if (srcLang.startsWith('th')) hwLang = 'th';
+  else if (srcLang.startsWith('vi')) hwLang = 'vi';
+
+  try {
+    const canvas = document.getElementById('hwCanvas');
+    const wrap = canvas.parentElement;
+    const rect = wrap.getBoundingClientRect();
+
+    const payload = {
+      options: "enable_pre_space",
+      requests: [{
+        writing_guide: {
+          writing_area_width: Math.round(rect.width),
+          writing_area_height: Math.round(rect.height)
+        },
+        ink: ink,
+        language: hwLang
+      }]
+    };
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(`https://www.google.com.tw/inputtools/request?ime=handwriting&app=mobilesearch&cs=1&oe=UTF-8`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+
+    const data = await res.json();
+    if (data && data[0] === 'SUCCESS' && data[1] && data[1][0] && data[1][0][1]) {
+      const candidates = data[1][0][1];
+      preview.textContent = candidates[0] || '（無法辨識）';
+    } else {
+      preview.textContent = '（無法辨識，請重試）';
+    }
+  } catch (err) {
+    console.error('HW recognition error:', err);
+    preview.textContent = '（辨識失敗，請重試）';
+  }
+}
+
+function hwClear() {
+  hwStrokes = [];
+  hwRedraw();
+  document.getElementById('hwPreview').textContent = '';
+  if (hwRecogTimer) { clearTimeout(hwRecogTimer); hwRecogTimer = null; }
+}
+
+function hwUndo() {
+  hwStrokes.pop();
+  hwRedraw();
+  // Re-recognize with remaining strokes
+  if (hwStrokes.length > 0) {
+    if (hwRecogTimer) clearTimeout(hwRecogTimer);
+    hwRecogTimer = setTimeout(() => hwRecognize(), 500);
+  } else {
+    document.getElementById('hwPreview').textContent = '';
+  }
+}
+
+function hwAddNote() {
+  const preview = document.getElementById('hwPreview');
+  const text = preview.textContent.trim();
+  if (!text || text.startsWith('（') || text === '辨識中...') {
+    toast('請先手寫文字'); return;
+  }
+  // Add as a note
+  const offset = getTimeOffset();
+  const note = {
+    id: Date.now(),
+    time: new Date().toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    timeOffset: offset,
+    text: text
+  };
+  state.notes.push(note);
+  renderNote(note);
+  // Clear canvas
+  hwClear();
+  toast('已加入筆記');
+}
+
+// ==================== NOTES TABS ====================
+function switchNotesTab(tab) {
+  document.getElementById('notesModeSelect').value = tab;
+  document.getElementById('notesTextView').classList.toggle('hidden', tab !== 'text');
+  document.getElementById('hwContainer').classList.toggle('visible', tab === 'hw');
+  document.getElementById('drawContainer').classList.toggle('visible', tab === 'draw');
+  if (tab === 'draw') setTimeout(() => initCanvas(), 50);
+  if (tab === 'hw') setTimeout(() => initHwCanvas(), 50);
+}
+
+// ==================== COLLAPSIBLE PANELS ====================
+function togglePanel(panel) {
+  const elMap = { transcript: 'panelTranscript', notes: 'panelNotes', claude: 'panelClaude' };
+  const el = document.getElementById(elMap[panel]);
+  if (!el) return;
+  const isCollapsed = el.classList.toggle('collapsed');
+  // Update toggle arrows
+  const isMobileVert = window.innerWidth <= 768 && document.body.classList.contains('vertical-mode');
+  el.querySelectorAll('.panel-toggle').forEach(btn => {
+    if (isMobileVert) btn.textContent = isCollapsed ? '▼' : '▲';
+    else if (panel === 'notes') btn.textContent = isCollapsed ? '▶' : '◀';
+    else if (panel === 'claude') btn.textContent = isCollapsed ? '◀' : '▶';
+    else btn.textContent = isCollapsed ? '▼' : '▲';
+  });
+  localStorage.setItem(`panel-${panel}-collapsed`, isCollapsed ? '1' : '0');
+}
+
+// Restore collapsed state
+['notes', 'claude'].forEach(p => {
+  if (localStorage.getItem(`panel-${p}-collapsed`) === '1') {
+    togglePanel(p);
+  }
+});
+
+// (mobile tabs moved to bottom with Claude support)
+
+// ==================== SUBTITLE ====================
+function toggleSubtitle() {
+  subtitleOn = !subtitleOn;
+  document.getElementById('subtitleOverlay').classList.toggle('visible', subtitleOn);
+  document.getElementById('subtitleBtn').classList.toggle('active', subtitleOn);
+  if (subtitleOn && state.entries.length) {
+    const last = state.entries[state.entries.length-1];
+    document.getElementById('subOrig').textContent = last.original;
+    document.getElementById('subTrans').textContent = last.translation || '';
+  }
+}
+
+// Draggable subtitle
+(function() {
+  const ov = document.getElementById('subtitleOverlay');
+  let drag = false, sx, sy, ox, oy;
+  ov.addEventListener('pointerdown', (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    drag = true; sx = e.clientX; sy = e.clientY;
+    const r = ov.getBoundingClientRect(); ox = r.left; oy = r.top;
+    ov.style.transition = 'none';
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    ov.style.left = (ox + e.clientX - sx) + 'px';
+    ov.style.top = (oy + e.clientY - sy) + 'px';
+    ov.style.bottom = 'auto'; ov.style.transform = 'none';
+  });
+  document.addEventListener('pointerup', () => { drag = false; ov.style.transition = ''; });
+})();
+
+// ==================== EXPORT ====================
+function exportAll() {
+  if (!state.entries.length && !state.notes.length) { toast('沒有內容可匯出'); return; }
+  let txt = `# LiveTranslate 逐字稿\n# ${new Date().toLocaleString('zh-TW')}\n\n## 逐字稿\n\n`;
+  state.entries.forEach(e => {
+    txt += `[${fmtTime(e.timeOffset)}] ${e.original}\n`;
+    if (e.translation) txt += `→ ${e.translation}\n`;
+    txt += '\n';
+  });
+  if (state.notes.length) {
+    txt += `\n## 筆記\n\n`;
+    state.notes.forEach(n => { txt += `[${fmtTime(n.timeOffset)}] ${n.text}\n\n`; });
+  }
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `LiveTranslate_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  toast('已匯出！');
+}
+
+function clearAll() {
+  if (!state.entries.length) return;
+  if (!confirm('確定清除所有內容？')) return;
+  doNewSession(false);
+}
+
+function newSession() {
+  // Stop recording if running
+  if (state.recording) stopRec();
+  // Save current session if there's content
+  if (state.entries.length) {
+    saveSession();
+    toast('已儲存並開始新場次');
+  }
+  doNewSession(true);
+}
+
+function doNewSession(isNew) {
+  state.entries = []; state.notes = [];
+  state.audioChunks = []; state.audioBlob = null; state.audioUrl = null;
+  state.startTime = null; state.sessionId = Date.now();
+  document.getElementById('transcriptScroll').innerHTML = `<div class="empty-state" id="emptyState"><div class="empty-icon">🎙️</div><div style="font-size:15px;">按下錄音鍵開始即時語音辨識</div><div style="font-size:12px;">支援 Chrome / Edge / Safari</div></div>`;
+  document.getElementById('notesList').innerHTML = '';
+  document.getElementById('audioBar').style.display = 'none';
+  document.getElementById('timer').textContent = '00:00';
+  if (audioEl) { audioEl.pause(); audioEl = null; }
+  if (!isNew) toast('已清除');
+}
+
+// ==================== UTILITY ====================
+function toast(msg) {
+  const old = document.querySelector('.toast'); if (old) old.remove();
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  if (e.code === 'Space') { e.preventDefault(); toggleRec(); }
+  if (e.code === 'Escape' && subtitleOn) toggleSubtitle();
+});
+
+// ==================== CLAUDE CHAT ====================
+let claudeMessages = []; // {role, content}
+let claudeSending = false;
+
+async function initClaude() {
+  // Check if server already has an API key
+  try {
+    const res = await fetch('/api/has-key');
+    const data = await res.json();
+    if (data.hasKey) {
+      document.getElementById('claudeSetup').style.display = 'none';
+      document.getElementById('claudeMsgs').style.display = 'flex';
+      document.getElementById('quickBtns').style.display = 'flex';
+      document.getElementById('claudeInputArea').style.display = 'flex';
+      addClaudeMsg('system', '已連線！你可以隨時問我關於會議內容的問題。');
+      return;
+    }
+  } catch {}
+  // Fallback: check localStorage
+  const key = localStorage.getItem('claude_api_key');
+  if (key) {
+    document.getElementById('claudeSetup').style.display = 'none';
+    document.getElementById('claudeMsgs').style.display = 'flex';
+    document.getElementById('quickBtns').style.display = 'flex';
+    document.getElementById('claudeInputArea').style.display = 'flex';
+    addClaudeMsg('system', '已連線！你可以隨時問我關於會議內容的問題。');
+  }
+}
+
+async function saveClaudeKey() {
+  const key = document.getElementById('claudeKeyInput').value.trim();
+  if (!key || !key.startsWith('sk-')) { toast('請輸入有效的 API Key (sk-ant-...)'); return; }
+  // Save to server so all devices can use it
+  try {
+    const res = await fetch('/api/save-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: key }),
+    });
+    if (res.ok) {
+      toast('API Key 已儲存到伺服器，所有裝置可共用');
+    }
+  } catch {
+    // Fallback save to localStorage
+    localStorage.setItem('claude_api_key', key);
+    toast('API Key 已儲存（僅限此裝置）');
+  }
+  document.getElementById('claudeSetup').style.display = 'none';
+  document.getElementById('claudeMsgs').style.display = 'flex';
+  document.getElementById('quickBtns').style.display = 'flex';
+  document.getElementById('claudeInputArea').style.display = 'flex';
+  addClaudeMsg('system', '已連線！你可以問我任何問題，我會參考即時逐字稿回答。');
+}
+
+function showClaudeSetup() {
+  const setup = document.getElementById('claudeSetup');
+  setup.style.display = setup.style.display === 'none' ? 'flex' : 'none';
+}
+
+function addClaudeMsg(type, text) {
+  const cls = type === 'user' ? 'cmsg-user' : type === 'ai' ? 'cmsg-ai' : 'cmsg-system';
+  const div = document.createElement('div');
+  div.className = `cmsg ${cls}`;
+  // Simple markdown: **bold**, `code`, ```code blocks```
+  let html = text
+    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+  div.innerHTML = html;
+  document.getElementById('claudeMsgs').appendChild(div);
+  document.getElementById('claudeMsgs').scrollTop = document.getElementById('claudeMsgs').scrollHeight;
+  return div;
+}
+
+function getTranscriptContext() {
+  if (!state.entries.length) return '（目前沒有逐字稿內容）';
+  // Include last 30 entries max to fit context
+  const recent = state.entries.slice(-30);
+  return recent.map(e => {
+    let line = `[${fmtTime(e.timeOffset)}] ${e.original}`;
+    if (e.translation) line += `\n→ ${e.translation}`;
+    return line;
+  }).join('\n\n');
+}
+
+function quickAsk(question) {
+  document.getElementById('claudeInput').value = question;
+  sendClaude();
+}
+
+async function sendClaude() {
+  const input = document.getElementById('claudeInput');
+  const text = input.value.trim();
+  if (!text || claudeSending) return;
+
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+
+  // Add user message
+  addClaudeMsg('user', text);
+  claudeMessages.push({ role: 'user', content: text });
+  input.value = '';
+  input.style.height = '42px';
+
+  // Show typing indicator
+  claudeSending = true;
+  document.getElementById('claudeSend').disabled = true;
+  const typing = document.createElement('div');
+  typing.className = 'cmsg cmsg-typing';
+  typing.textContent = '思考中';
+  document.getElementById('claudeMsgs').appendChild(typing);
+  document.getElementById('claudeMsgs').scrollTop = document.getElementById('claudeMsgs').scrollHeight;
+
+  // Build system prompt with transcript
+  const transcript = getTranscriptContext();
+  const systemPrompt = `你是一個會議/課堂助理。用戶正在參加一場會議或課程，以下是目前的即時逐字稿（含翻譯）。請根據逐字稿內容回答用戶的問題。用繁體中文回答。
+
+===== 即時逐字稿 =====
+${transcript}
+===== 逐字稿結束 =====
+
+注意事項：
+- 回答要簡潔明確
+- 如果用戶問的問題在逐字稿中沒有相關內容，請誠實說明
+- 可以幫忙總結、解釋、列出重點或待辦事項`;
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        system: systemPrompt,
+        messages: claudeMessages.slice(-20), // Keep last 20 messages
+      }),
+    });
+
+    typing.remove();
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const errMsg = err.error?.message || err.error || `API 錯誤 (${res.status})`;
+      addClaudeMsg('system', `❌ ${errMsg}`);
+      if (res.status === 401) addClaudeMsg('system', '請檢查 API Key 是否正確。');
+    } else {
+      const data = await res.json();
+      const reply = data.content?.[0]?.text || '（無回應）';
+      addClaudeMsg('ai', reply);
+      claudeMessages.push({ role: 'assistant', content: reply });
+    }
+  } catch (err) {
+    typing.remove();
+    addClaudeMsg('system', `❌ 連線錯誤：${err.message}`);
+  }
+
+  claudeSending = false;
+  document.getElementById('claudeSend').disabled = false;
+}
+
+function claudeKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendClaude(); }
+  setTimeout(() => {
+    e.target.style.height = '42px';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+  }, 0);
+}
+
+// ==================== MOBILE PANEL (updated for Claude) ====================
+function showMobPanel(panel, el) {
+  document.querySelectorAll('.mob-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panelTranscript').classList.toggle('mob-hidden', panel !== 'transcript');
+  document.getElementById('panelNotes').classList.toggle('mob-visible', panel === 'notes');
+  document.getElementById('panelClaude').classList.toggle('mob-visible', panel === 'claude');
+  if (panel === 'notes') setTimeout(() => initCanvas(), 50);
+}
+
+// ==================== LAYOUT TOGGLE ====================
+function toggleLayout() {
+  const isVertical = document.body.classList.toggle('vertical-mode');
+  localStorage.setItem('layout-mode', isVertical ? 'vertical' : 'horizontal');
+  document.getElementById('layoutBtn').textContent = isVertical ? '📐 橫式' : '📐 直式';
+  // Reset mobile panels when switching
+  document.querySelectorAll('.mob-visible').forEach(el => el.classList.remove('mob-visible'));
+  document.getElementById('panelTranscript').classList.remove('mob-hidden');
+}
+
+// Restore saved layout (default vertical on mobile)
+{
+  const savedLayout = localStorage.getItem('layout-mode');
+  const isMobile = window.innerWidth <= 768;
+  if (savedLayout === 'vertical' || (isMobile && savedLayout !== 'horizontal')) {
+    document.body.classList.add('vertical-mode');
+    document.getElementById('layoutBtn').textContent = '📐 橫式';
+  }
+}
+
+// ==================== SESSION HISTORY ====================
+function saveSession() {
+  if (!state.entries.length) return;
+  const sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+  const session = {
+    id: state.sessionId || Date.now(),
+    date: new Date().toLocaleString('zh-TW'),
+    entries: state.entries,
+    notes: state.notes,
+    entryCount: state.entries.length,
+    noteCount: state.notes.length,
+    duration: state.startTime ? fmtTime((Date.now() - state.startTime) / 1000) : '00:00',
+  };
+  // Update existing or add new
+  const idx = sessions.findIndex(s => s.id === session.id);
+  if (idx >= 0) sessions[idx] = session;
+  else sessions.unshift(session);
+  // Keep last 50 sessions
+  if (sessions.length > 50) sessions.length = 50;
+  localStorage.setItem('lt-sessions', JSON.stringify(sessions));
+}
+
+// Auto-save every 30 seconds while recording
+setInterval(() => { if (state.recording) saveSession(); }, 30000);
+
+// Also save when stopping recording
+const origStopRec = stopRec;
+stopRec = function() {
+  origStopRec();
+  saveSession();
+};
+
+// Give current session an ID
+state.sessionId = Date.now();
+
+function showHistory() {
+  const sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+  const list = document.getElementById('historyList');
+  if (!sessions.length) {
+    list.innerHTML = '<div class="history-empty">尚無歷史紀錄</div>';
+  } else {
+    list.innerHTML = sessions.map(s => `
+      <div class="history-item" onclick="loadSession(${s.id})">
+        <div class="history-info">
+          <div class="history-date">${s.date}</div>
+          <div class="history-meta">${s.entryCount} 段語音 · ${s.noteCount} 筆記 · ${s.duration}</div>
+        </div>
+        <button class="history-del" onclick="event.stopPropagation();deleteSession(${s.id})">🗑</button>
+      </div>
+    `).join('');
+  }
+  document.getElementById('historyModal').classList.add('visible');
+}
+
+function closeHistory() {
+  document.getElementById('historyModal').classList.remove('visible');
+}
+
+function loadSession(id) {
+  const sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+  const session = sessions.find(s => s.id === id);
+  if (!session) return;
+
+  // Stop current recording if active
+  if (state.recording) stopRec();
+
+  state.entries = session.entries || [];
+  state.notes = session.notes || [];
+  state.sessionId = id;
+
+  // Re-render
+  const scroll = document.getElementById('transcriptScroll');
+  scroll.innerHTML = '';
+  state.entries.forEach(e => renderEntry(e));
+
+  const notesList = document.getElementById('notesList');
+  notesList.innerHTML = '';
+  state.notes.forEach(n => renderNote(n));
+
+  closeHistory();
+  toast(`已載入 ${session.date} 的紀錄`);
+}
+
+function deleteSession(id) {
+  let sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+  sessions = sessions.filter(s => s.id !== id);
+  localStorage.setItem('lt-sessions', JSON.stringify(sessions));
+  showHistory(); // Refresh list
+}
+
+// Close modal on overlay click
+document.getElementById('historyModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeHistory();
+});
+
+// Init Claude on load
+initClaude();
+
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
