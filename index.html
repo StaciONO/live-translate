@@ -688,7 +688,11 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 function createRecognition() {
   if (!SR) {
     const ua = navigator.userAgent;
-    if (/iPhone|iPad/.test(ua)) toast('iOS 請用 Safari 並確保使用 HTTPS 連線');
+    const isHTTPS = location.protocol === 'https:';
+    if (/iPhone|iPad/.test(ua)) {
+      if (!isHTTPS) toast('iOS 需要 HTTPS 才能使用語音辨識，請用 HTTPS 連結');
+      else toast('語音辨識不可用。請確認 Safari 設定 → 網站 → 麥克風 已允許');
+    }
     else if (/Android/.test(ua)) toast('請使用 Chrome 瀏覽器');
     else toast('此瀏覽器不支援語音辨識，請用 Chrome 或 Edge');
     return null;

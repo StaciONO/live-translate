@@ -1,4 +1,4 @@
-const CACHE = 'livetranslate-v2';
+const CACHE = 'livetranslate-v3';
 const FILES = ['/', '/index.html', '/icon.png', '/manifest.json'];
 
 self.addEventListener('install', (e) => {

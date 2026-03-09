@@ -283,6 +283,24 @@ function handleRequest(req, res) {
     return;
   }
 
+  // ===== Clear cache page =====
+  if (req.method === 'GET' && req.url === '/clear') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(`<!DOCTYPE html><html><body style="font-family:system-ui;padding:40px;text-align:center;">
+<h2>清除快取中...</h2><p id="s">請稍候</p>
+<script>
+(async()=>{
+  const regs=await navigator.serviceWorker.getRegistrations();
+  for(const r of regs) await r.unregister();
+  const keys=await caches.keys();
+  for(const k of keys) await caches.delete(k);
+  document.getElementById('s').textContent='✅ 已清除！3 秒後重新載入...';
+  setTimeout(()=>location.href='/',3000);
+})();
+</script></body></html>`);
+    return;
+  }
+
   // ===== Static Files =====
   let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url);
   const ext = path.extname(filePath);
