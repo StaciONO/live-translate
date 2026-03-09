@@ -3,4 +3,5 @@ dist/
 key.pem
 cert.pem
 config.json
+sessions/
 .DS_Store

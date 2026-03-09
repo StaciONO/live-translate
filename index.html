@@ -393,6 +393,30 @@
       border-radius:6px; color:var(--text1); font-size:12px; outline:none; cursor:pointer;
     }
 
+    /* ===== TOPIC BAR ===== */
+    .topic-bar {
+      display:flex; align-items:center; gap:8px; padding:6px 16px;
+      background:var(--bg2); border-bottom:1px solid var(--border); flex-shrink:0;
+    }
+    .topic-input {
+      flex:1; padding:6px 10px; background:var(--bg3); border:1px solid var(--border);
+      border-radius:8px; color:var(--text1); font-size:13px; outline:none;
+      font-family:inherit;
+    }
+    .topic-input:focus { border-color:var(--accent); }
+    .topic-input::placeholder { color:var(--text3); font-size:12px; }
+    @media(max-width:768px) {
+      .topic-bar { padding:4px 10px; gap:4px; }
+      .topic-input { font-size:12px; padding:4px 8px; }
+    }
+
+    /* ===== AI BADGE ===== */
+    .ai-badge {
+      display:inline-block; font-size:9px; background:var(--accent); color:#fff;
+      padding:1px 4px; border-radius:3px; margin-left:6px; vertical-align:middle;
+      font-weight:600; letter-spacing:0.5px;
+    }
+
     /* ===== TOAST ===== */
     .toast {
       position:fixed; bottom:20px; right:20px; padding:10px 18px; background:#333;
@@ -445,6 +469,14 @@
   </div>
 </header>
 
+<!-- TOPIC BAR -->
+<div class="topic-bar" id="topicBar">
+  <span style="font-size:12px;color:var(--text3);white-space:nowrap;">📋 主題</span>
+  <input type="text" class="topic-input" id="meetingTopic"
+    placeholder="輸入會議/課堂主題，可提升翻譯和重點整理品質（例：Access Consciousness Q&A with Gary Douglas）"
+    oninput="localStorage.setItem('lt-meeting-topic',this.value)">
+</div>
+
 <!-- MOBILE TABS -->
 <div class="mobile-tabs">
   <div class="mobile-tabs-inner">
@@ -458,9 +490,12 @@
 <div class="main">
   <!-- Transcript Panel -->
   <div class="panel-transcript" id="panelTranscript">
-    <div class="panel-collapse-bar transcript-collapse-bar" onclick="togglePanel('transcript')">
-      <span>📝 逐字稿</span>
-      <button class="panel-toggle" title="收合/展開">▼</button>
+    <div class="panel-collapse-bar transcript-collapse-bar">
+      <span onclick="togglePanel('transcript')">📝 逐字稿</span>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn btn-sm" onclick="event.stopPropagation();summarizeTranscript()" title="用 AI 整理重點" style="font-size:11px;padding:3px 8px;">✨ 整理重點</button>
+        <button class="panel-toggle" onclick="togglePanel('transcript')" title="收合/展開">▼</button>
+      </div>
     </div>
     <div class="transcript-scroll" id="transcriptScroll">
       <div class="empty-state" id="emptyState">
@@ -468,6 +503,10 @@
         <div style="font-size:15px;">按下錄音鍵開始即時語音辨識</div>
         <div style="font-size:12px;">支援 Chrome / Edge / Safari</div>
       </div>
+    </div>
+    <!-- Transcript actions -->
+    <div class="audio-bar" id="transcriptActions" style="display:flex;justify-content:flex-end;padding:4px 12px;border-top:1px solid var(--border);">
+      <button class="btn btn-sm" onclick="summarizeTranscript()" style="font-size:12px;">✨ 整理重點</button>
     </div>
     <!-- Audio Player -->
     <div class="audio-bar" id="audioBar" style="display:none;">
@@ -597,6 +636,21 @@
   </div>
 </div>
 
+<!-- Summary Modal -->
+<div class="modal-overlay" id="summaryModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h3>✨ 重點整理</h3>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm" onclick="copySummary()">📋 複製</button>
+        <button class="btn btn-sm" onclick="summaryToNotes()">📒 存入筆記</button>
+        <button class="modal-close" onclick="closeSummary()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="summaryBody" style="padding:16px 20px;"></div>
+  </div>
+</div>
+
 <!-- Floating Subtitle -->
 <div class="subtitle-overlay" id="subtitleOverlay">
   <button class="subtitle-close" onclick="toggleSubtitle()">✕</button>
@@ -615,6 +669,13 @@ const state = {
   audioBlob: null,
   audioUrl: null,
 };
+
+// ==================== MEETING TOPIC ====================
+function getMeetingTopic() {
+  return document.getElementById('meetingTopic')?.value?.trim() || '';
+}
+// Restore on load
+document.getElementById('meetingTopic').value = localStorage.getItem('lt-meeting-topic') || '';
 let recognition = null;
 let mediaRecorder = null;
 let audioEl = null;
@@ -806,6 +867,9 @@ function addEntry(text) {
   state.entries.push(entry);
   renderEntry(entry);
   translateEntry(entry);
+  queueClaudeTranslation(entry); // Queue for Claude enhancement if topic is set
+  // Auto-save every 5 entries
+  if (state.entries.length % 5 === 0) saveSession();
 
   if (subtitleOn) {
     document.getElementById('subOrig').textContent = text;
@@ -883,9 +947,78 @@ async function translateEntry(entry) {
 
 function updateTransUI(entry) {
   const el = document.getElementById(`et-${entry.id}`);
-  if (el) el.textContent = entry.translation;
+  if (el) {
+    el.textContent = entry.translation;
+    // Show AI badge if Claude-enhanced
+    if (entry._claudeTranslated && !el.querySelector('.ai-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'ai-badge';
+      badge.textContent = 'AI';
+      badge.title = 'Claude 翻譯增強';
+      el.appendChild(badge);
+    }
+  }
   if (subtitleOn && state.entries.length && state.entries[state.entries.length-1].id === entry.id) {
     document.getElementById('subTrans').textContent = entry.translation;
+  }
+}
+
+// ==================== CLAUDE BATCH TRANSLATION ENHANCEMENT ====================
+const langNames = {
+  'en': 'English', 'zh': '中文（繁體）', 'ja': '日本語', 'ko': '한국어',
+  'fr': 'Français', 'de': 'Deutsch', 'es': 'Español', 'th': 'ภาษาไทย', 'vi': 'Tiếng Việt',
+};
+let claudeTransQueue = [];
+let claudeTransTimer = null;
+
+function queueClaudeTranslation(entry) {
+  if (!getMeetingTopic()) return; // Only when topic is set
+  claudeTransQueue.push(entry);
+  if (claudeTransTimer) clearTimeout(claudeTransTimer);
+  claudeTransTimer = setTimeout(() => {
+    const batch = claudeTransQueue.splice(0);
+    if (batch.length) claudeBatchTranslate(batch);
+  }, 10000); // 10-second debounce
+}
+
+async function claudeBatchTranslate(entries) {
+  const topic = getMeetingTopic();
+  if (!topic || !entries.length) return;
+
+  const src = document.getElementById('srcLang').value.split('-')[0];
+  const tgt = document.getElementById('tgtLang').value.split('-')[0];
+  const srcName = langNames[src] || src;
+  const tgtName = langNames[tgt] || tgt;
+
+  const textBlock = entries.map((e, i) => `[${i}] ${e.original}`).join('\n');
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: `You are a professional translator. Context/topic: "${topic}". Translate from ${srcName} to ${tgtName}. Use proper terminology for this context. Fix any speech recognition errors you can detect. Return ONLY the translations, one per line, each prefixed with [index]. Example:\n[0] 翻譯內容\n[1] 翻譯內容`,
+        messages: [{ role: 'user', content: textBlock }],
+      }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || '';
+    const lines = reply.split('\n');
+    lines.forEach(line => {
+      const match = line.match(/^\[(\d+)\]\s*(.+)/);
+      if (match) {
+        const idx = parseInt(match[1]);
+        const translation = match[2].trim();
+        if (entries[idx] && translation) {
+          entries[idx].translation = translation;
+          entries[idx]._claudeTranslated = true;
+          updateTransUI(entries[idx]);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Claude batch translate failed:', err);
   }
 }
 
@@ -1530,6 +1663,109 @@ function getTranscriptContext() {
   }).join('\n\n');
 }
 
+// ==================== SUMMARIZE TRANSCRIPT ====================
+async function summarizeTranscript() {
+  if (!state.entries.length) { toast('還沒有逐字稿內容'); return; }
+
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+  const transcript = state.entries.map(e => {
+    let line = `[${fmtTime(e.timeOffset)}] ${e.original}`;
+    if (e.translation) line += ` → ${e.translation}`;
+    return line;
+  }).join('\n');
+
+  // Show loading modal
+  const modal = document.getElementById('summaryModal');
+  const body = document.getElementById('summaryBody');
+  body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);">✨ AI 正在整理重點...</div>';
+  modal.classList.add('visible');
+
+  try {
+    const topic = getMeetingTopic();
+    const sysPrompt = `你是一位專業的會議/課堂記錄整理助理。請用繁體中文回答。
+${topic ? `本場會議/課堂主題：「${topic}」。請使用你對此主題的專業知識來理解內容、正確翻譯專有名詞、並深入整理。` : ''}
+你的任務是將零散的即時語音辨識逐字稿，整理成結構清晰、有深度的會議/課堂記錄。`;
+
+    const userMsg = `請幫我整理以下逐字稿。注意：逐字稿來自即時語音辨識，可能有辨識錯誤或斷句不完整，請用你的理解力修正。
+
+請嚴格按照以下格式輸出：
+
+## 📌 重點整理
+列出這場${topic ? `「${topic}」` : '會議/課堂'}的 3-5 個核心主題或重點，每個用一小段話說明。
+
+## 🔑 關鍵觀點
+列出最重要的觀點、洞見或教導，每一條包含：
+- 觀點的核心概念（用自己的話清楚說明）
+- 如果有精彩的原文表述，用「」引用原文
+
+## 🏗️ 其他情境內容
+補充值得記錄的背景資訊，例如：具體案例、問答互動、提到的人物或事件等。
+
+## 💡 一句話總結
+用一句話概括這場${topic ? `「${topic}」` : '會議/課堂'}的核心訊息或收穫。
+
+---
+逐字稿內容：
+${transcript}`;
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        system: sysPrompt,
+        messages: [{ role: 'user', content: userMsg }],
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      body.innerHTML = `<div style="color:var(--err);padding:20px;">❌ ${err.error?.message || err.error || 'API 錯誤'}</div>`;
+      return;
+    }
+
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || '（無回應）';
+
+    // Render markdown-like formatting
+    const html = reply
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^### (.*$)/gm, '<h4 style="margin:12px 0 6px;color:var(--accent);">$1</h4>')
+      .replace(/^## (.*$)/gm, '<h3 style="margin:14px 0 8px;color:var(--accent);">$1</h3>')
+      .replace(/^# (.*$)/gm, '<h2 style="margin:16px 0 8px;color:var(--accent);">$1</h2>')
+      .replace(/^[-•] (.*$)/gm, '<div style="padding:2px 0 2px 16px;">• $1</div>')
+      .replace(/^(\d+)\. (.*$)/gm, '<div style="padding:2px 0 2px 16px;">$1. $2</div>')
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>');
+
+    body.innerHTML = `<div style="font-size:14px;line-height:1.7;color:var(--text1);">${html}</div>`;
+  } catch (err) {
+    body.innerHTML = `<div style="color:var(--err);padding:20px;">❌ 連線錯誤：${err.message}</div>`;
+  }
+}
+
+function closeSummary() {
+  document.getElementById('summaryModal').classList.remove('visible');
+}
+
+function copySummary() {
+  const text = document.getElementById('summaryBody').innerText;
+  navigator.clipboard.writeText(text).then(() => toast('已複製到剪貼簿')).catch(() => toast('複製失敗'));
+}
+
+function summaryToNotes() {
+  const text = document.getElementById('summaryBody').innerText;
+  if (text) {
+    const noteId = Date.now();
+    const timeOffset = getTimeOffset();
+    state.notes.push({ id: noteId, time: new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}), timeOffset, text: '📌 重點摘要\n' + text });
+    renderNotes();
+    closeSummary();
+    toast('已加入筆記');
+  }
+}
+
 function quickAsk(question) {
   document.getElementById('claudeInput').value = question;
   sendClaude();
@@ -1559,7 +1795,9 @@ async function sendClaude() {
 
   // Build system prompt with transcript
   const transcript = getTranscriptContext();
-  const systemPrompt = `你是一個會議/課堂助理。用戶正在參加一場會議或課程，以下是目前的即時逐字稿（含翻譯）。請根據逐字稿內容回答用戶的問題。用繁體中文回答。
+  const topic = getMeetingTopic();
+  const systemPrompt = `你是一個會議/課堂助理。用戶正在參加一場會議或課程。${topic ? `\n本場主題：「${topic}」。請使用你對此主題的專業知識來回答問題。` : ''}
+以下是目前的即時逐字稿（含翻譯）。請根據逐字稿內容回答用戶的問題。用繁體中文回答。
 
 ===== 即時逐字稿 =====
 ${transcript}
@@ -1568,7 +1806,8 @@ ${transcript}
 注意事項：
 - 回答要簡潔明確
 - 如果用戶問的問題在逐字稿中沒有相關內容，請誠實說明
-- 可以幫忙總結、解釋、列出重點或待辦事項`;
+- 可以幫忙總結、解釋、列出重點或待辦事項
+- 逐字稿來自即時語音辨識，可能有辨識錯誤，請用你的理解力修正`;
 
   try {
     const res = await fetch('/api/chat', {
@@ -1653,6 +1892,7 @@ function saveSession() {
     entryCount: state.entries.length,
     noteCount: state.notes.length,
     duration: state.startTime ? fmtTime((Date.now() - state.startTime) / 1000) : '00:00',
+    meetingTopic: getMeetingTopic(),
   };
   // Update existing or add new
   const idx = sessions.findIndex(s => s.id === session.id);
@@ -1661,6 +1901,13 @@ function saveSession() {
   // Keep last 50 sessions
   if (sessions.length > 50) sessions.length = 50;
   localStorage.setItem('lt-sessions', JSON.stringify(sessions));
+
+  // Also save to server (async, non-blocking)
+  fetch('/api/sessions/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(session),
+  }).catch(() => {}); // Silently fail if server unreachable
 }
 
 // Auto-save every 30 seconds while recording
@@ -1673,36 +1920,97 @@ stopRec = function() {
   saveSession();
 };
 
+// Auto-save when page is closed/refreshed
+window.addEventListener('beforeunload', () => { saveSession(); });
+
 // Give current session an ID
 state.sessionId = Date.now();
 
-function showHistory() {
+// Auto-restore last session on page load
+(function autoRestore() {
   const sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+  if (!sessions.length) return;
+  const last = sessions[0]; // most recent
+  // Only auto-restore if it was saved within the last 12 hours
+  const savedTime = last.id || 0;
+  if (Date.now() - savedTime > 12 * 60 * 60 * 1000) return;
+  state.entries = last.entries || [];
+  state.notes = last.notes || [];
+  state.sessionId = last.id;
+  // Restore meeting topic
+  if (last.meetingTopic) {
+    document.getElementById('meetingTopic').value = last.meetingTopic;
+    localStorage.setItem('lt-meeting-topic', last.meetingTopic);
+  }
+  // Re-render
+  if (state.entries.length) {
+    const scroll = document.getElementById('transcriptScroll');
+    scroll.innerHTML = '';
+    state.entries.forEach(e => renderEntry(e));
+  }
+  if (state.notes.length) {
+    state.notes.forEach(n => renderNote(n));
+  }
+})();
+
+async function showHistory() {
   const list = document.getElementById('historyList');
-  if (!sessions.length) {
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);">載入中...</div>';
+  document.getElementById('historyModal').classList.add('visible');
+
+  // Get local sessions
+  const localSessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+  const localIds = new Set(localSessions.map(s => s.id));
+
+  // Try to get server sessions
+  let serverSessions = [];
+  try {
+    const res = await fetch('/api/sessions');
+    if (res.ok) serverSessions = await res.json();
+  } catch {}
+
+  // Merge: add server-only sessions
+  const merged = [...localSessions];
+  serverSessions.forEach(s => {
+    if (!localIds.has(s.id)) {
+      s._serverOnly = true;
+      merged.push(s);
+    }
+  });
+  merged.sort((a, b) => b.id - a.id);
+
+  if (!merged.length) {
     list.innerHTML = '<div class="history-empty">尚無歷史紀錄</div>';
   } else {
-    list.innerHTML = sessions.map(s => `
-      <div class="history-item" onclick="loadSession(${s.id})">
+    list.innerHTML = merged.map(s => `
+      <div class="history-item" onclick="loadSession(${s.id}, ${!!s._serverOnly})">
         <div class="history-info">
-          <div class="history-date">${s.date}</div>
-          <div class="history-meta">${s.entryCount} 段語音 · ${s.noteCount} 筆記 · ${s.duration}</div>
+          <div class="history-date">${s.date} ${s._serverOnly ? '☁️' : ''}</div>
+          <div class="history-meta">${s.entryCount} 段語音 · ${s.noteCount || 0} 筆記 · ${s.duration}${s.meetingTopic ? ' · ' + s.meetingTopic : ''}</div>
         </div>
         <button class="history-del" onclick="event.stopPropagation();deleteSession(${s.id})">🗑</button>
       </div>
     `).join('');
   }
-  document.getElementById('historyModal').classList.add('visible');
 }
 
 function closeHistory() {
   document.getElementById('historyModal').classList.remove('visible');
 }
 
-function loadSession(id) {
-  const sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
-  const session = sessions.find(s => s.id === id);
-  if (!session) return;
+async function loadSession(id, fromServer = false) {
+  let session;
+  if (fromServer) {
+    try {
+      const res = await fetch(`/api/sessions/${id}`);
+      if (res.ok) session = await res.json();
+    } catch {}
+  }
+  if (!session) {
+    const sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
+    session = sessions.find(s => s.id === id);
+  }
+  if (!session) { toast('找不到此紀錄'); return; }
 
   // Stop current recording if active
   if (state.recording) stopRec();
@@ -1710,6 +2018,12 @@ function loadSession(id) {
   state.entries = session.entries || [];
   state.notes = session.notes || [];
   state.sessionId = id;
+
+  // Restore meeting topic
+  if (session.meetingTopic) {
+    document.getElementById('meetingTopic').value = session.meetingTopic;
+    localStorage.setItem('lt-meeting-topic', session.meetingTopic);
+  }
 
   // Re-render
   const scroll = document.getElementById('transcriptScroll');
@@ -1724,10 +2038,13 @@ function loadSession(id) {
   toast(`已載入 ${session.date} 的紀錄`);
 }
 
-function deleteSession(id) {
+async function deleteSession(id) {
+  // Delete from localStorage
   let sessions = JSON.parse(localStorage.getItem('lt-sessions') || '[]');
   sessions = sessions.filter(s => s.id !== id);
   localStorage.setItem('lt-sessions', JSON.stringify(sessions));
+  // Delete from server
+  try { await fetch(`/api/sessions/${id}`, { method: 'DELETE' }); } catch {}
   showHistory(); // Refresh list
 }
 

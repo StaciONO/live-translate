@@ -6,6 +6,12 @@ const path = require('path');
 const PORT = 19876;
 const HTTPS_PORT = 19877;
 
+// ===== Sessions Directory =====
+const SESSIONS_DIR = path.join(__dirname, 'sessions');
+if (!fs.existsSync(SESSIONS_DIR)) {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+}
+
 // ===== Server-side API Key =====
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 let serverApiKey = '';
@@ -178,11 +184,99 @@ function handleRequest(req, res) {
     return;
   }
 
+  // ===== Session API: Save =====
+  if (req.method === 'POST' && req.url === '/api/sessions/save') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const session = JSON.parse(body);
+        if (!session.id || !/^\d+$/.test(String(session.id))) {
+          res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({ error: 'Invalid session id' }));
+          return;
+        }
+        const fp = path.join(SESSIONS_DIR, `${session.id}.json`);
+        fs.writeFileSync(fp, JSON.stringify(session, null, 2));
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ ok: true, id: session.id }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // ===== Session API: List =====
+  if (req.method === 'GET' && req.url === '/api/sessions') {
+    try {
+      const files = fs.readdirSync(SESSIONS_DIR)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+          try {
+            const data = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
+            return {
+              id: data.id,
+              date: data.date,
+              entryCount: data.entryCount || 0,
+              noteCount: data.noteCount || 0,
+              duration: data.duration || '00:00',
+              meetingTopic: data.meetingTopic || '',
+            };
+          } catch { return null; }
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.id - a.id);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(files));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // ===== Session API: Get / Delete by ID =====
+  if (req.url.startsWith('/api/sessions/')) {
+    const id = req.url.split('/api/sessions/')[1];
+    if (!/^\d+$/.test(id)) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Invalid session id' }));
+      return;
+    }
+    const fp = path.join(SESSIONS_DIR, `${id}.json`);
+
+    if (req.method === 'GET') {
+      if (fs.existsSync(fp)) {
+        const data = fs.readFileSync(fp, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(data);
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+      }
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      if (fs.existsSync(fp)) {
+        fs.unlinkSync(fp);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ ok: true }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+      }
+      return;
+    }
+  }
+
   // ===== CORS preflight =====
   if (req.method === 'OPTIONS') {
     res.writeHead(200, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
     res.end();
